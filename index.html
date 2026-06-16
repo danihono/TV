@@ -151,6 +151,12 @@
     display: flex; align-items: center; gap: 16px;
     padding: 4px 0;
   }
+  .brand-logo {
+    height: 44px;
+    width: auto;
+    display: block;
+    filter: drop-shadow(0 2px 8px rgba(0,0,0,0.7)) drop-shadow(0 0 12px rgba(0,191,255,0.25));
+  }
   .brand-mark {
     color: var(--blue);
     font-family: 'Oswald', sans-serif;
@@ -1027,6 +1033,7 @@
     .brand-mark { font-size: 32px; }
     .brand-text .wordmark { font-size: 24px; }
     .brand-text .advisor { font-size: 10px; letter-spacing: 0.4em; }
+    .brand-logo { height: 38px; }
     .header-center { font-size: 9px; letter-spacing: 0.4em; }
     .header-center::before, .header-center::after { width: 22px; }
 
@@ -1330,6 +1337,7 @@
     .brand-mark { font-size: 42px; }
     .brand-text .wordmark { font-size: 32px; }
     .brand-text .advisor { font-size: 12px; letter-spacing: 0.5em; }
+    .brand-logo { height: 54px; }
 
     .header-center { font-size: 11px; letter-spacing: 0.5em; }
     .header-center::before, .header-center::after { width: 36px; }
@@ -1359,7 +1367,7 @@
     .cal-month { font-size: 24px; }
     .cal-year { font-size: 15px; }
     .cal-dow { font-size: 9px; padding: 4px 0 6px; }
-    .cal-day { font-size: 16px; padding: 6px 0; }
+    .cal-day { font-size: 16px; padding: 4px 0; }
 
     .consult-row { padding: 6px 4px; gap: 12px; grid-template-columns: 42px 1fr auto; }
     .avatar { width: 42px; height: 42px; }
@@ -1435,6 +1443,7 @@
     .brand-mark { font-size: 26px; }
     .brand-text .wordmark { font-size: 18px; }
     .brand-text .advisor { font-size: 8px; letter-spacing: 0.32em; margin-top: 0; }
+    .brand-logo { height: 30px; }
     .weather { padding: 6px 12px; gap: 8px; }
     .weather .icon { font-size: 18px; }
     .weather .meta { display: none; }
@@ -1622,11 +1631,7 @@
   <!-- HEADER · BRAND LOCKUP -->
   <header>
     <div class="brand">
-      <div class="brand-mark">»</div>
-      <div class="brand-text">
-        <div class="wordmark">FOLLOW</div>
-        <div class="advisor">ADVISOR</div>
-      </div>
+      <img class="brand-logo" src="logo-3-empresas.png" alt="Travessia · FollowLabs · Follow Advisor">
     </div>
 
     <div class="header-center"><span class="live">Ao vivo</span>Office Display · Vinhedo SP</div>
@@ -1720,10 +1725,6 @@
             <iframe id="spotify-frame" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
           </div>
 
-          <!-- Slide 5: YouTube -->
-          <div class="slide" data-label="Motion · Quadro 05">
-            <iframe id="youtube-frame" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin" loading="lazy"></iframe>
-          </div>
 
         </div>
 
@@ -1732,7 +1733,6 @@
           <button class="car-dot" data-i="1"></button>
           <button class="car-dot" data-i="2"></button>
           <button class="car-dot" data-i="3"></button>
-          <button class="car-dot" data-i="4"></button>
         </div>
       </div>
 
@@ -1748,10 +1748,6 @@
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M21.6 7.2a2.5 2.5 0 0 0-1.8-1.8C18.2 5 12 5 12 5s-6.2 0-7.8.4A2.5 2.5 0 0 0 2.4 7.2C2 8.8 2 12 2 12s0 3.2.4 4.8a2.5 2.5 0 0 0 1.8 1.8C5.8 19 12 19 12 19s6.2 0 7.8-.4a2.5 2.5 0 0 0 1.8-1.8C22 15.2 22 12 22 12s0-3.2-.4-4.8zM10 15V9l5 3-5 3z"/></svg>
             YouTube
           </a>
-          <button class="shortcut" id="btn-video">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="5" width="18" height="14" rx="1"/><path d="M10 9l5 3-5 3V9z" fill="currentColor"/></svg>
-            Vídeo
-          </button>
           <button class="shortcut" id="btn-spotify">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.5-5.4-1.8-9-1-.4.1-.7-.2-.8-.5-.1-.4.2-.7.5-.8 3.9-.9 7.3-.5 9.9 1.1.4.2.5.6.3 1z"/></svg>
             Trilha
@@ -1843,7 +1839,6 @@ const CFG = {
   lat: -23.0297,
   lon: -46.9756,
   spotifyDefault: 'https://open.spotify.com/embed/playlist/37i9dQZF1DX4WYpdgoIcn6?utm_source=generator&theme=0',
-  youtubeDefault: 'https://www.youtube.com/embed/jfKfPfyJRdk?autoplay=1&mute=1&controls=0',
   screensaverIdleMs: 5 * 60 * 1000,
   carouselMs: 16 * 1000,
   bgRotateMs: 24 * 1000,
@@ -2026,19 +2021,13 @@ dots.forEach(d => d.addEventListener('click', () => {
   carouselTimer = setInterval(nextSlide, CFG.carouselMs);
 }));
 
-/* ============ SPOTIFY + YOUTUBE ============ */
+/* ============ SPOTIFY ============ */
 function loadSpotify(url){
   const f = url || store.get('spotify') || CFG.spotifyDefault;
   document.getElementById('spotify-frame').src = f;
   if (url) store.set('spotify', url);
 }
-function loadYouTube(url){
-  const f = url || store.get('youtube') || CFG.youtubeDefault;
-  document.getElementById('youtube-frame').src = f;
-  if (url) store.set('youtube', url);
-}
 loadSpotify();
-loadYouTube();
 
 /* ============ VISITORS / APPTS ============ */
 function renderVisitors(){
@@ -2177,26 +2166,6 @@ function toSpotifyEmbed(url){
   if (m) return `https://open.spotify.com/embed/${m[1]}/${m[2]}?utm_source=generator&theme=0`;
   return url;
 }
-function toYouTubeEmbed(url){
-  if (!url) return null;
-  // Normaliza: trim + converte travessões/en-dash/em-dash em hífen ASCII + remove chars invisíveis
-  url = url.trim()
-    .replace(/[\u2010\u2011\u2012\u2013\u2014\u2015\u2212\uFE58\uFE63\uFF0D]/g, '-')
-    .replace(/[\u200B-\u200D\uFEFF]/g, '');
-  // Já é embed — só adiciona autoplay se faltar
-  if (url.includes('/embed/')) {
-    const sep = url.includes('?') ? '&' : '?';
-    if (!/[?&]autoplay=/.test(url)) return url + sep + 'autoplay=1&mute=1&playsinline=1';
-    return url;
-  }
-  // ID do vídeo: watch?v=, youtu.be/, /shorts/, /live/, /v/, /e/
-  const m = url.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:[^#]*&)?v=|shorts\/|live\/|v\/|e\/))([a-zA-Z0-9_-]{11})/);
-  if (m) return `https://www.youtube-nocookie.com/embed/${m[1]}?autoplay=1&mute=1&playsinline=1&rel=0&modestbranding=1&loop=1&playlist=${m[1]}`;
-  // Playlist
-  const pl = url.match(/[?&]list=([a-zA-Z0-9_-]+)/);
-  if (pl) return `https://www.youtube-nocookie.com/embed/videoseries?list=${pl[1]}&autoplay=1&mute=1`;
-  return null;
-}
 
 document.getElementById('btn-spotify').addEventListener('click', () => {
   openModal('Trilha · Spotify', 'Cole o link público da playlist, álbum ou faixa.', [
@@ -2207,18 +2176,6 @@ document.getElementById('btn-spotify').addEventListener('click', () => {
   });
 });
 
-document.getElementById('btn-video').addEventListener('click', () => {
-  openModal('Motion · YouTube', 'Cole link do YouTube: watch, youtu.be, shorts, live ou playlist.', [
-    { id:'url', label:'URL YouTube', ph:'https://youtube.com/watch?v=...' }
-  ], data => {
-    if (!data.url) return;
-    const u = toYouTubeEmbed(data.url);
-    if (u){ loadYouTube(u); showSlide(4); }
-    else {
-      alert('Link do YouTube não reconhecido.\n\nFormatos aceitos:\n• youtube.com/watch?v=ID\n• youtu.be/ID\n• youtube.com/shorts/ID\n• youtube.com/live/ID\n• Playlist (?list=...)');
-    }
-  });
-});
 
 /* ============ FULLSCREEN ============ */
 document.getElementById('btn-fs').addEventListener('click', () => {
