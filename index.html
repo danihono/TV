@@ -1725,6 +1725,10 @@
             <iframe id="spotify-frame" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
           </div>
 
+          <!-- Slide 5: YouTube -->
+          <div class="slide" data-label="Motion · Quadro 05">
+            <div id="youtube-frame"></div>
+          </div>
 
         </div>
 
@@ -1733,6 +1737,7 @@
           <button class="car-dot" data-i="1"></button>
           <button class="car-dot" data-i="2"></button>
           <button class="car-dot" data-i="3"></button>
+          <button class="car-dot" data-i="4"></button>
         </div>
       </div>
 
@@ -1839,7 +1844,9 @@ const CFG = {
   lat: -23.0297,
   lon: -46.9756,
   spotifyDefault: 'https://open.spotify.com/embed/playlist/37i9dQZF1DX4WYpdgoIcn6?utm_source=generator&theme=0',
+  youtubeId: 'qqIdoogCXkA',
   screensaverIdleMs: 5 * 60 * 1000,
+  screensaverDurationMs: 2 * 60 * 1000,
   carouselMs: 16 * 1000,
   bgRotateMs: 24 * 1000,
   consultores: [
@@ -2006,20 +2013,27 @@ setInterval(rotateQuote, 24 * 1000);
 /* ============ CAROUSEL ============ */
 const slides = document.querySelectorAll('.slide');
 const dots = document.querySelectorAll('.car-dot');
+const ytSlideIdx = [...slides].findIndex(s => s.querySelector('#youtube-frame'));
 let slideIdx = 0;
+let carouselTimer = null;
+
+function restartTimer(){
+  clearTimeout(carouselTimer);
+  // No slide do YouTube não avançamos por tempo: esperamos o vídeo terminar.
+  if (slideIdx === ytSlideIdx) return;
+  carouselTimer = setTimeout(nextSlide, CFG.carouselMs);
+}
 function showSlide(i){
   slideIdx = i;
   slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
   dots.forEach((d, idx) => d.classList.toggle('active', idx === i));
   document.getElementById('car-label').textContent = slides[i].dataset.label;
+  if (i === ytSlideIdx) playYouTube(); else stopYouTube();
+  restartTimer();
 }
 function nextSlide(){ showSlide((slideIdx + 1) % slides.length); }
-let carouselTimer = setInterval(nextSlide, CFG.carouselMs);
-dots.forEach(d => d.addEventListener('click', () => {
-  showSlide(parseInt(d.dataset.i));
-  clearInterval(carouselTimer);
-  carouselTimer = setInterval(nextSlide, CFG.carouselMs);
-}));
+restartTimer();
+dots.forEach(d => d.addEventListener('click', () => showSlide(parseInt(d.dataset.i))));
 
 /* ============ SPOTIFY ============ */
 function loadSpotify(url){
@@ -2028,6 +2042,47 @@ function loadSpotify(url){
   if (url) store.set('spotify', url);
 }
 loadSpotify();
+
+/* ============ YOUTUBE ============ */
+let ytPlayer = null, ytReady = false;
+function playYouTube(){
+  if (!ytReady || !ytPlayer) return;
+  try {
+    ytPlayer.seekTo(0);
+    ytPlayer.unMute();
+    ytPlayer.playVideo();
+    // Fallback: se o navegador bloquear autoplay com som, toca sem som.
+    setTimeout(() => {
+      if (slideIdx === ytSlideIdx && ytPlayer.getPlayerState
+          && ytPlayer.getPlayerState() !== YT.PlayerState.PLAYING){
+        ytPlayer.mute();
+        ytPlayer.playVideo();
+      }
+    }, 700);
+  } catch(_){}
+}
+function stopYouTube(){
+  if (!ytReady || !ytPlayer) return;
+  try { ytPlayer.pauseVideo(); ytPlayer.seekTo(0); } catch(_){}
+}
+window.onYouTubeIframeAPIReady = function(){
+  ytPlayer = new YT.Player('youtube-frame', {
+    videoId: CFG.youtubeId,
+    playerVars: {
+      autoplay: 0, controls: 1, rel: 0, modestbranding: 1,
+      playsinline: 1, fs: 0, iv_load_policy: 3
+    },
+    events: {
+      onReady: () => { ytReady = true; if (slideIdx === ytSlideIdx) playYouTube(); },
+      onStateChange: e => { if (e.data === YT.PlayerState.ENDED) nextSlide(); }
+    }
+  });
+};
+(function(){
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  document.head.appendChild(tag);
+})();
 
 /* ============ VISITORS / APPTS ============ */
 function renderVisitors(){
@@ -2187,16 +2242,24 @@ document.getElementById('btn-fs').addEventListener('click', () => {
 const saver = document.getElementById('screensaver');
 const ssBg = document.getElementById('ss-bg');
 let idleTimer = null;
+let saverTimer = null;
 function activateSaver(){
   const pick = CFG.heroBgs[Math.floor(Math.random() * CFG.heroBgs.length)];
   ssBg.style.backgroundImage = `url('${pick}')`;
   saver.classList.add('on');
+  // Revezamento: fica no descanso por X min e volta sozinho para a tela normal.
+  clearTimeout(saverTimer);
+  saverTimer = setTimeout(exitSaver, CFG.screensaverDurationMs);
 }
 function startIdle(){
   clearTimeout(idleTimer);
   idleTimer = setTimeout(activateSaver, CFG.screensaverIdleMs);
 }
-function exitSaver(){ saver.classList.remove('on'); startIdle(); }
+function exitSaver(){
+  clearTimeout(saverTimer);
+  saver.classList.remove('on');
+  startIdle();
+}
 ['mousemove','keydown','touchstart','click'].forEach(ev =>
   document.addEventListener(ev, () => {
     if (saver.classList.contains('on')) exitSaver();
@@ -2255,8 +2318,6 @@ carStage.addEventListener('touchend', e => {
   if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.4 && dt < 700){
     if (dx < 0) nextSlide();
     else showSlide((slideIdx - 1 + slides.length) % slides.length);
-    clearInterval(carouselTimer);
-    carouselTimer = setInterval(nextSlide, CFG.carouselMs);
   }
 }, {passive: true});
 
