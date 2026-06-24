@@ -497,6 +497,7 @@
   }
   .slide.active { opacity: 1; visibility: visible; }
   .slide iframe { width: 100%; height: 100%; border: 0; background: var(--ink-0); }
+  #spotify-frame { width: 100%; height: 100%; }
 
   /* Cinematic photo slide */
   .slide-cinema {
@@ -1722,7 +1723,7 @@
 
           <!-- Slide 4: Spotify -->
           <div class="slide" data-label="Trilha · Quadro 04">
-            <iframe id="spotify-frame" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe>
+            <div id="spotify-frame"></div>
           </div>
 
           <!-- Slide 5: YouTube -->
@@ -1845,6 +1846,8 @@ const CFG = {
   lon: -46.9756,
   spotifyDefault: 'https://open.spotify.com/embed/playlist/37i9dQZF1DX4WYpdgoIcn6?utm_source=generator&theme=0',
   youtubeId: 'qqIdoogCXkA',
+  spotifySongs: 3,                 // nº de músicas a tocar antes de avançar
+  spotifyMaxMs: 12 * 60 * 1000,    // rede de segurança: avança se o play travar/for bloqueado
   screensaverIdleMs: 5 * 60 * 1000,
   screensaverDurationMs: 2 * 60 * 1000,
   carouselMs: 16 * 1000,
@@ -2014,13 +2017,15 @@ setInterval(rotateQuote, 24 * 1000);
 const slides = document.querySelectorAll('.slide');
 const dots = document.querySelectorAll('.car-dot');
 const ytSlideIdx = [...slides].findIndex(s => s.querySelector('#youtube-frame'));
+const spotifySlideIdx = [...slides].findIndex(s => s.querySelector('#spotify-frame'));
 let slideIdx = 0;
 let carouselTimer = null;
 
 function restartTimer(){
   clearTimeout(carouselTimer);
-  // No slide do YouTube não avançamos por tempo: esperamos o vídeo terminar.
-  if (slideIdx === ytSlideIdx) return;
+  // No slide do YouTube e do Spotify não avançamos por tempo:
+  // o YouTube espera o vídeo terminar; o Spotify conta as músicas.
+  if (slideIdx === ytSlideIdx || slideIdx === spotifySlideIdx) return;
   carouselTimer = setTimeout(nextSlide, CFG.carouselMs);
 }
 function showSlide(i){
@@ -2029,6 +2034,7 @@ function showSlide(i){
   dots.forEach((d, idx) => d.classList.toggle('active', idx === i));
   document.getElementById('car-label').textContent = slides[i].dataset.label;
   if (i === ytSlideIdx) playYouTube(); else stopYouTube();
+  if (i === spotifySlideIdx) playSpotify(); else stopSpotify();
   restartTimer();
 }
 function nextSlide(){ showSlide((slideIdx + 1) % slides.length); }
@@ -2036,12 +2042,47 @@ restartTimer();
 dots.forEach(d => d.addEventListener('click', () => showSlide(parseInt(d.dataset.i))));
 
 /* ============ SPOTIFY ============ */
-function loadSpotify(url){
-  const f = url || store.get('spotify') || CFG.spotifyDefault;
-  document.getElementById('spotify-frame').src = f;
-  if (url) store.set('spotify', url);
+let spotifyController = null, songsPlayed = 0, lastUri = null, spotifyFallback = null;
+
+function playSpotify(){
+  // Reinicia a contagem ao entrar no slide e arma a rede de segurança.
+  songsPlayed = 0; lastUri = null;
+  clearTimeout(spotifyFallback);
+  spotifyFallback = setTimeout(() => {
+    if (slideIdx === spotifySlideIdx) nextSlide();
+  }, CFG.spotifyMaxMs);
+  if (spotifyController){ try { spotifyController.play(); } catch(_){} }
 }
-loadSpotify();
+function stopSpotify(){
+  clearTimeout(spotifyFallback);
+  if (spotifyController){ try { spotifyController.pause(); } catch(_){} }
+}
+
+window.onSpotifyIframeApiReady = function(IFrameAPI){
+  const el = document.getElementById('spotify-frame');
+  const uri = toSpotifyUri(store.get('spotify') || CFG.spotifyDefault);
+  IFrameAPI.createController(el, { uri, width: '100%', height: '100%' }, controller => {
+    spotifyController = controller;
+    controller.addListener('playback_update', e => {
+      const u = e.data && e.data.playingURI;
+      if (u && u !== lastUri){
+        if (lastUri !== null) songsPlayed++;   // cada troca de faixa = +1 música tocada
+        lastUri = u;
+        if (songsPlayed >= CFG.spotifySongs && slideIdx === spotifySlideIdx){
+          clearTimeout(spotifyFallback);
+          nextSlide();
+        }
+      }
+    });
+    // Se já estamos no slide do Spotify quando o player fica pronto, começa a tocar.
+    if (slideIdx === spotifySlideIdx) playSpotify();
+  });
+};
+(function(){
+  const tag = document.createElement('script');
+  tag.src = 'https://open.spotify.com/embed/iframe-api/v1';
+  document.head.appendChild(tag);
+})();
 
 /* ============ YOUTUBE ============ */
 let ytPlayer = null, ytReady = false;
@@ -2063,7 +2104,10 @@ function playYouTube(){
 }
 function stopYouTube(){
   if (!ytReady || !ytPlayer) return;
-  try { ytPlayer.pauseVideo(); ytPlayer.seekTo(0); } catch(_){}
+  // Apenas pausa. Não fazemos seekTo aqui: chamar seekTo logo após pause
+  // pode fazer o vídeo voltar a tocar no fundo em outros slides.
+  // O reset para o início já é feito pelo playYouTube ao entrar no slide.
+  try { ytPlayer.pauseVideo(); } catch(_){}
 }
 window.onYouTubeIframeAPIReady = function(){
   ytPlayer = new YT.Player('youtube-frame', {
@@ -2074,7 +2118,14 @@ window.onYouTubeIframeAPIReady = function(){
     },
     events: {
       onReady: () => { ytReady = true; if (slideIdx === ytSlideIdx) playYouTube(); },
-      onStateChange: e => { if (e.data === YT.PlayerState.ENDED) nextSlide(); }
+      onStateChange: e => {
+        if (e.data === YT.PlayerState.ENDED) { nextSlide(); return; }
+        // O vídeo só pode tocar no slide do YouTube.
+        // Se começar a tocar fora dele (ex.: por algum autoplay), pausa na hora.
+        if (e.data === YT.PlayerState.PLAYING && slideIdx !== ytSlideIdx){
+          try { ytPlayer.pauseVideo(); } catch(_){}
+        }
+      }
     }
   });
 };
@@ -2221,13 +2272,23 @@ function toSpotifyEmbed(url){
   if (m) return `https://open.spotify.com/embed/${m[1]}/${m[2]}?utm_source=generator&theme=0`;
   return url;
 }
+// Converte URL (embed ou normal) ou URI do Spotify para o formato spotify:tipo:id.
+function toSpotifyUri(url){
+  if (!url) return null;
+  const m = url.match(/(playlist|album|track|artist|show|episode)[\/:]([a-zA-Z0-9]+)/);
+  return m ? `spotify:${m[1]}:${m[2]}` : null;
+}
 
 document.getElementById('btn-spotify').addEventListener('click', () => {
   openModal('Trilha · Spotify', 'Cole o link público da playlist, álbum ou faixa.', [
     { id:'url', label:'URL Spotify', ph:'https://open.spotify.com/playlist/...' }
   ], data => {
-    const u = toSpotifyEmbed(data.url);
-    if (u){ loadSpotify(u); showSlide(3); }
+    const uri = toSpotifyUri(data.url);
+    if (uri){
+      store.set('spotify', data.url);
+      if (spotifyController) spotifyController.loadUri(uri);
+      showSlide(spotifySlideIdx);
+    }
   });
 });
 
