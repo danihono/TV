@@ -1862,7 +1862,13 @@ const CFG = {
   city: 'Vinhedo · SP',
   lat: -23.0297,
   lon: -46.9756,
-  spotifyDefault: 'https://open.spotify.com/embed/playlist/37i9dQZF1DX4WYpdgoIcn6?utm_source=generator&theme=0',
+  spotifyDefault: 'https://open.spotify.com/embed/playlist/37i9dQZF1E8LvEb7oiMt1a?utm_source=generator&theme=0',
+  // O embed do Spotify NÃO embaralha uma playlist sozinho (sempre toca da 1ª faixa).
+  // Para as músicas variarem, cada vez que entra no slide é sorteada UMA destas
+  // playlists ao acaso. Adicione mais links aqui para ter mais variedade.
+  spotifyPlaylists: [
+    'https://open.spotify.com/playlist/37i9dQZF1E8LvEb7oiMt1a'
+  ],
   youtubeId: 'qqIdoogCXkA',
   spotifySongs: 3,                 // nº de músicas a tocar antes de avançar
   spotifyMaxMs: 12 * 60 * 1000,    // rede de segurança: avança se o play travar/for bloqueado
@@ -2064,6 +2070,16 @@ dots.forEach(d => d.addEventListener('click', () => showSlide(parseInt(d.dataset
 /* ============ SPOTIFY ============ */
 let spotifyController = null, songsPlayed = 0, lastUri = null, spotifyFallback = null;
 
+// Sorteia a playlist a tocar. Se o usuário fixou uma pelo botão "Trilha", usa essa;
+// senão escolhe ao acaso uma das CFG.spotifyPlaylists (para não cair sempre na mesma).
+function randomSpotifyUri(){
+  const manual = store.get('spotify');
+  if (manual) return toSpotifyUri(manual);
+  const list = (CFG.spotifyPlaylists && CFG.spotifyPlaylists.length)
+    ? CFG.spotifyPlaylists : [CFG.spotifyDefault];
+  const choice = list[Math.floor(Math.random() * list.length)];
+  return toSpotifyUri(choice);
+}
 function playSpotify(){
   // Reinicia a contagem ao entrar no slide e arma a rede de segurança.
   songsPlayed = 0; lastUri = null;
@@ -2071,7 +2087,13 @@ function playSpotify(){
   spotifyFallback = setTimeout(() => {
     if (slideIdx === spotifySlideIdx) nextSlide();
   }, CFG.spotifyMaxMs);
-  if (spotifyController){ try { spotifyController.play(); } catch(_){} }
+  if (spotifyController){
+    try {
+      const uri = randomSpotifyUri();      // sorteia a cada entrada no slide
+      if (uri) spotifyController.loadUri(uri);
+      spotifyController.play();
+    } catch(_){}
+  }
 }
 function stopSpotify(){
   clearTimeout(spotifyFallback);
@@ -2080,7 +2102,7 @@ function stopSpotify(){
 
 window.onSpotifyIframeApiReady = function(IFrameAPI){
   const el = document.getElementById('spotify-frame');
-  const uri = toSpotifyUri(store.get('spotify') || CFG.spotifyDefault);
+  const uri = randomSpotifyUri();
   IFrameAPI.createController(el, { uri, width: '100%', height: '100%' }, controller => {
     spotifyController = controller;
     controller.addListener('playback_update', e => {
