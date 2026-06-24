@@ -86,6 +86,14 @@
     background: radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%);
   }
 
+  /* CORREÇÃO TV: enquanto o vídeo do YouTube está ativo, escondemos as camadas
+     decorativas que ficam por cima com mix-blend-mode/filtro. Em navegadores de
+     TV, blend sobre a camada de vídeo de hardware faz o vídeo sumir. */
+  body.yt-active .grain,
+  body.yt-active .scanlines,
+  body.yt-active .lens-dust,
+  body.yt-active .lens-flare { display: none !important; }
+
   /* Film grain */
   .grain {
     position: fixed; inset: 0; z-index: 50; pointer-events: none;
@@ -482,6 +490,15 @@
     padding: 0;
     position: relative;
     min-height: 320px;
+    /* CORREÇÃO TV: a animação .rise (fill both) deixa transform/filter "presos"
+       no painel, e .panel tem backdrop-filter. Em navegadores de TV isso desliga
+       a camada de vídeo por hardware do YouTube (áudio toca, vídeo some).
+       Removemos esses efeitos só deste painel e deixamos o fundo opaco. */
+    background: var(--ink-1) !important;
+    transform: none !important;
+    filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
   }
   .stage-panel::before, .stage-panel::after { display: none; }
   .stage-content {
@@ -2034,6 +2051,8 @@ function showSlide(i){
   slides.forEach((s, idx) => s.classList.toggle('active', idx === i));
   dots.forEach((d, idx) => d.classList.toggle('active', idx === i));
   document.getElementById('car-label').textContent = slides[i].dataset.label;
+  // Marca quando o vídeo do YouTube está em tela (esconde camadas que o ocultam na TV).
+  document.body.classList.toggle('yt-active', i === ytSlideIdx);
   if (i === ytSlideIdx) playYouTube(); else stopYouTube();
   if (i === spotifySlideIdx) playSpotify(); else stopSpotify();
   restartTimer();
