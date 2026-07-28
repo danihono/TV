@@ -768,6 +768,14 @@
     box-shadow: 0 0 24px rgba(0,191,255,0.15);
   }
   .shortcut svg { width: 14px; height: 14px; flex-shrink: 0; }
+  /* Estado "fixado": laranja para lembrar que o painel está travado num quadro. */
+  .shortcut.on {
+    border-color: var(--spark);
+    color: var(--spark);
+    background: rgba(255,140,66,0.08);
+    box-shadow: 0 0 24px rgba(255,140,66,0.18);
+  }
+  .shortcut.on:hover { border-color: var(--spark); color: var(--spark); box-shadow: 0 0 28px rgba(255,140,66,0.3); }
   .liveled {
     display: flex; align-items: center; gap: 10px;
     font-family: 'Oswald', sans-serif;
@@ -1776,6 +1784,10 @@
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20zm4.6 14.4a.6.6 0 0 1-.9.2c-2.4-1.5-5.4-1.8-9-1-.4.1-.7-.2-.8-.5-.1-.4.2-.7.5-.8 3.9-.9 7.3-.5 9.9 1.1.4.2.5.6.3 1z"/></svg>
             Trilha
           </button>
+          <button class="shortcut" id="btn-lock" title="Trava o painel neste quadro (a música toca sem trocar de slide)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg>
+            Fixar
+          </button>
           <button class="shortcut" id="btn-saver">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
             Title card
@@ -1863,14 +1875,28 @@ const CFG = {
   lat: -23.0297,
   lon: -46.9756,
   spotifyDefault: 'https://open.spotify.com/embed/playlist/37i9dQZF1E8LvEb7oiMt1a?utm_source=generator&theme=0',
-  // O embed do Spotify NÃO embaralha uma playlist sozinho (sempre toca da 1ª faixa).
-  // Para as músicas variarem, cada vez que entra no slide é sorteada UMA destas
-  // playlists ao acaso. Adicione mais links aqui para ter mais variedade.
-  spotifyPlaylists: [
-    'https://open.spotify.com/playlist/37i9dQZF1E8LvEb7oiMt1a'
-  ],
+  // ══════════════════════════════════════════════════════════════════════
+  //  PLAYLISTS DA TRILHA  ·  É AQUI QUE VOCÊ MEXE
+  //
+  //  Cole UM LINK POR LINHA, aqui dentro das crases. Sem aspas, sem vírgula.
+  //  Serve playlist, álbum ou artista do Spotify. Linha começando com # é
+  //  ignorada, então dá para deixar anotação ou desligar uma sem apagar.
+  //
+  //  Para pegar o link: Spotify > abra a playlist > ... > Compartilhar >
+  //  Copiar link da playlist.
+  //
+  //  Quanto mais links, menos repete. O painel embaralha a lista e vai
+  //  consumindo sem repetir; só reembaralha quando todas já tocaram
+  //  (é o "saco de sorteio" em nextSpotifyUri).
+  //
+  //  Obs.: o embed do Spotify sempre começa da 1ª faixa de cada playlist e
+  //  não embaralha por dentro — por isso a variedade vem de ter várias aqui.
+  // ══════════════════════════════════════════════════════════════════════
+  spotifyPlaylists: `
+    https://open.spotify.com/playlist/37i9dQZF1DX6VdMW310YC7
+  `,
   youtubeId: 'qqIdoogCXkA',
-  spotifySongs: 3,                 // nº de músicas a tocar antes de avançar
+  spotifySongs: 6,                 // nº de músicas a tocar antes de avançar
   spotifyMaxMs: 12 * 60 * 1000,    // rede de segurança: avança se o play travar/for bloqueado
   screensaverIdleMs: 5 * 60 * 1000,
   screensaverDurationMs: 2 * 60 * 1000,
@@ -2045,8 +2071,20 @@ const spotifySlideIdx = [...slides].findIndex(s => s.querySelector('#spotify-fra
 let slideIdx = 0;
 let carouselTimer = null;
 
+// "Fixar": trava o carrossel num slide (tipicamente o do Spotify) para ele
+// tocar por horas sem o painel trocar de quadro. Guarda o índice, não um booleano,
+// para o slide fixado sobreviver a um refresh da página.
+function isLocked(){ return store.get('lockedSlide', null) !== null; }
+function setLock(idx){
+  store.set('lockedSlide', idx);
+  document.getElementById('btn-lock').classList.toggle('on', idx !== null);
+  if (idx !== null) showSlide(idx); else restartTimer();
+}
+
 function restartTimer(){
   clearTimeout(carouselTimer);
+  // Fixado: nunca avança sozinho.
+  if (isLocked()) return;
   // No slide do YouTube e do Spotify não avançamos por tempo:
   // o YouTube espera o vídeo terminar; o Spotify conta as músicas.
   if (slideIdx === ytSlideIdx || slideIdx === spotifySlideIdx) return;
@@ -2069,28 +2107,71 @@ dots.forEach(d => d.addEventListener('click', () => showSlide(parseInt(d.dataset
 
 /* ============ SPOTIFY ============ */
 let spotifyController = null, songsPlayed = 0, lastUri = null, spotifyFallback = null;
+let pendingUri = null;   // playlist já sorteada e ainda não tocada
+let loadedUri  = null;   // playlist que está carregada no player agora
 
-// Sorteia a playlist a tocar. Se o usuário fixou uma pelo botão "Trilha", usa essa;
-// senão escolhe ao acaso uma das CFG.spotifyPlaylists (para não cair sempre na mesma).
-function randomSpotifyUri(){
-  const manual = store.get('spotify');
+// Playlists disponíveis: as escritas no CFG + as acrescentadas pelo botão
+// "Trilha" na TV. O CFG aceita texto solto (um link por linha, com # virando
+// comentário) ou array, para o bloco lá em cima ser fácil de editar à mão.
+// Normaliza tudo para spotify:tipo:id, descarta link torto e remove duplicadas.
+function spotifySources(){
+  const raw = CFG.spotifyPlaylists;
+  const base = (typeof raw === 'string' ? raw.split('\n') : (raw || []))
+    .map(s => String(s).trim())
+    .filter(s => s && !s.startsWith('#'));
+  const extra = store.get('spotifyList', []);
+  const uniq = [...new Set([...base, ...extra].map(toSpotifyUri).filter(Boolean))];
+  // Rede de segurança: lista vazia (ou só com link torto) não pode deixar o slide mudo.
+  return uniq.length ? uniq : [toSpotifyUri(CFG.spotifyDefault)].filter(Boolean);
+}
+function shuffleArr(a){
+  for (let i = a.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+// Saco de sorteio: embaralha a lista inteira e consome uma playlist por vez.
+// Só reembaralha quando o saco esvazia — assim nenhuma playlist repete antes
+// de todas as outras terem tocado (um sorteio simples repetiria à toa).
+function nextSpotifyUri(){
+  const manual = store.get('spotify');            // playlist fixada pelo botão "Trilha"
   if (manual) return toSpotifyUri(manual);
-  const list = (CFG.spotifyPlaylists && CFG.spotifyPlaylists.length)
-    ? CFG.spotifyPlaylists : [CFG.spotifyDefault];
-  const choice = list[Math.floor(Math.random() * list.length)];
-  return toSpotifyUri(choice);
+  const sources = spotifySources();
+  if (!sources.length) return null;
+  // Descarta do saco o que saiu da lista (playlists removidas pelo usuário).
+  let bag = store.get('spotifyBag', []).filter(u => sources.includes(u));
+  if (!bag.length){
+    bag = shuffleArr(sources.slice());
+    // Evita que o saco novo comece justo com a última que acabou de tocar.
+    const last = store.get('spotifyLast');
+    if (bag.length > 1 && bag[0] === last) bag.push(bag.shift());
+  }
+  const uri = bag.shift();
+  store.set('spotifyBag', bag);
+  store.set('spotifyLast', uri);
+  return uri;
 }
 function playSpotify(){
   // Reinicia a contagem ao entrar no slide e arma a rede de segurança.
   songsPlayed = 0; lastUri = null;
   clearTimeout(spotifyFallback);
   spotifyFallback = setTimeout(() => {
-    if (slideIdx === spotifySlideIdx) nextSlide();
+    if (slideIdx === spotifySlideIdx && !isLocked()) nextSlide();
   }, CFG.spotifyMaxMs);
   if (spotifyController){
     try {
-      const uri = randomSpotifyUri();      // sorteia a cada entrada no slide
-      if (uri) spotifyController.loadUri(uri);
+      // Usa a que já foi sorteada na criação do player; depois sorteia a cada entrada.
+      const uri = pendingUri || nextSpotifyUri();
+      pendingUri = null;
+      // Só recarrega se for uma playlist DIFERENTE da que está no player.
+      // Recarregar a mesma jogaria de volta para a faixa 1 — é justamente isso
+      // que fazia o painel repetir as primeiras músicas o dia inteiro. Sendo a
+      // mesma, apenas retoma de onde parou e a playlist avança até o fim.
+      if (uri && uri !== loadedUri){
+        spotifyController.loadUri(uri);
+        loadedUri = uri;
+      }
       spotifyController.play();
     } catch(_){}
   }
@@ -2102,15 +2183,17 @@ function stopSpotify(){
 
 window.onSpotifyIframeApiReady = function(IFrameAPI){
   const el = document.getElementById('spotify-frame');
-  const uri = randomSpotifyUri();
-  IFrameAPI.createController(el, { uri, width: '100%', height: '100%' }, controller => {
+  pendingUri = nextSpotifyUri();
+  loadedUri  = pendingUri;   // o player já nasce com essa carregada
+  IFrameAPI.createController(el, { uri: pendingUri, width: '100%', height: '100%' }, controller => {
     spotifyController = controller;
     controller.addListener('playback_update', e => {
       const u = e.data && e.data.playingURI;
       if (u && u !== lastUri){
         if (lastUri !== null) songsPlayed++;   // cada troca de faixa = +1 música tocada
         lastUri = u;
-        if (songsPlayed >= CFG.spotifySongs && slideIdx === spotifySlideIdx){
+        // Com a trilha fixada o slide nunca avança: fica tocando indefinidamente.
+        if (songsPlayed >= CFG.spotifySongs && slideIdx === spotifySlideIdx && !isLocked()){
           clearTimeout(spotifyFallback);
           nextSlide();
         }
@@ -2162,7 +2245,8 @@ window.onYouTubeIframeAPIReady = function(){
     events: {
       onReady: () => { ytReady = true; if (slideIdx === ytSlideIdx) playYouTube(); },
       onStateChange: e => {
-        if (e.data === YT.PlayerState.ENDED) { nextSlide(); return; }
+        // Fixado no slide do vídeo: repete em vez de avançar.
+        if (e.data === YT.PlayerState.ENDED) { if (isLocked()) playYouTube(); else nextSlide(); return; }
         // O vídeo só pode tocar no slide do YouTube.
         // Se começar a tocar fora dele (ex.: por algum autoplay), pausa na hora.
         if (e.data === YT.PlayerState.PLAYING && slideIdx !== ytSlideIdx){
@@ -2247,15 +2331,16 @@ const mSub = document.getElementById('modal-sub');
 const mFields = document.getElementById('modal-fields');
 let mOnSave = null;
 
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function openModal(title, sub, fields, onSave){
   mTitle.textContent = title;
   mSub.textContent = sub;
   mFields.innerHTML = fields.map(f => `
     <div class="field">
-      <label>${f.label}</label>
+      <label>${esc(f.label)}</label>
       ${f.type === 'textarea'
-        ? `<textarea id="f-${f.id}" rows="2">${f.value || ''}</textarea>`
-        : `<input id="f-${f.id}" type="${f.type || 'text'}" value="${f.value || ''}" placeholder="${f.ph || ''}">`}
+        ? `<textarea id="f-${f.id}" rows="${f.rows || 2}">${esc(f.value)}</textarea>`
+        : `<input id="f-${f.id}" type="${f.type || 'text'}" value="${esc(f.value)}" placeholder="${esc(f.ph)}">`}
     </div>
   `).join('');
   mOnSave = onSave;
@@ -2323,16 +2408,31 @@ function toSpotifyUri(url){
 }
 
 document.getElementById('btn-spotify').addEventListener('click', () => {
-  openModal('Trilha · Spotify', 'Cole o link público da playlist, álbum ou faixa.', [
-    { id:'url', label:'URL Spotify', ph:'https://open.spotify.com/playlist/...' }
+  openModal('Trilha · Spotify',
+    `As playlists do código já entram no rodízio (${spotifySources().length} no total). Aqui você acrescenta outras sem mexer no arquivo.`, [
+    { id:'list', label:'Playlists extras (uma por linha)', type:'textarea', rows: 7,
+      value: store.get('spotifyList', []).join('\n') },
+    { id:'pin',  label:'Tocar só esta (vazio = rodízio)', ph:'https://open.spotify.com/playlist/...',
+      value: store.get('spotify') || '' }
   ], data => {
-    const uri = toSpotifyUri(data.url);
-    if (uri){
-      store.set('spotify', data.url);
-      if (spotifyController) spotifyController.loadUri(uri);
-      showSlide(spotifySlideIdx);
-    }
+    // Guarda só o que dá para converter em spotify:tipo:id — link torto é descartado.
+    const list = data.list.split('\n').map(s => s.trim()).filter(s => s && toSpotifyUri(s));
+    store.set('spotifyList', list);
+    store.set('spotifyBag', []);            // lista mudou: reembaralha do zero
+
+    const pinUri = toSpotifyUri(data.pin);
+    if (data.pin && pinUri) store.set('spotify', data.pin);
+    else store.set('spotify', null);         // campo vazio ou inválido: volta ao rodízio
+
+    // A lista mudou: força recarregar para o usuário ouvir o resultado na hora.
+    loadedUri  = null;
+    pendingUri = nextSpotifyUri();
+    showSlide(spotifySlideIdx);
   });
+});
+
+document.getElementById('btn-lock').addEventListener('click', () => {
+  setLock(isLocked() ? null : slideIdx);
 });
 
 
@@ -2348,6 +2448,8 @@ const ssBg = document.getElementById('ss-bg');
 let idleTimer = null;
 let saverTimer = null;
 function activateSaver(){
+  // Com um slide fixado (ex.: música tocando), o descanso de tela não entra.
+  if (isLocked()){ startIdle(); return; }
   const pick = CFG.heroBgs[Math.floor(Math.random() * CFG.heroBgs.length)];
   ssBg.style.backgroundImage = `url('${pick}')`;
   saver.classList.add('on');
@@ -2510,6 +2612,16 @@ function restoreLayout(){
 }
 restoreLayout();
 setupPanelDrag();
+
+/* ============ RESTAURA A TRAVA ============ */
+// Roda por último de propósito: showSlide() toca em spotifyController / ytPlayer,
+// que são `let` declarados mais acima — chamar antes disso dá ReferenceError.
+(function restoreLock(){
+  const locked = store.get('lockedSlide', null);
+  if (locked === null || locked >= slides.length) return;
+  document.getElementById('btn-lock').classList.add('on');
+  showSlide(locked);
+})();
 </script>
 </body>
 </html>
