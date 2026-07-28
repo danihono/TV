@@ -515,6 +515,20 @@
   .slide.active { opacity: 1; visibility: visible; }
   .slide iframe { width: 100%; height: 100%; border: 0; background: var(--ink-0); }
   #spotify-frame { width: 100%; height: 100%; }
+  /* Selo de diagnóstico do Spotify: aparece só quando uma faixa começa a tocar. */
+  #spotify-status {
+    position: absolute; left: 14px; bottom: 12px; z-index: 5;
+    display: none; align-items: center; gap: 7px;
+    padding: 6px 12px; border-radius: 2px;
+    font-family: 'Oswald', sans-serif;
+    font-size: 10px; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.16em;
+    background: rgba(5,8,16,0.82); border: 1px solid currentColor;
+    pointer-events: none;
+  }
+  #spotify-status.show { display: flex; }
+  #spotify-status.full    { color: var(--green); }
+  #spotify-status.preview { color: var(--spark); }
   #youtube-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
 
   /* Cinematic photo slide */
@@ -1750,6 +1764,8 @@
           <!-- Slide 4: Spotify -->
           <div class="slide" data-label="Trilha · Quadro 04">
             <div id="spotify-frame"></div>
+            <!-- Diagnóstico: diz se o embed está entregando faixa inteira ou prévia de 30s. -->
+            <div id="spotify-status"></div>
           </div>
 
           <!-- Slide 5: YouTube -->
@@ -2181,6 +2197,24 @@ function stopSpotify(){
   if (spotifyController){ try { spotifyController.pause(); } catch(_){} }
 }
 
+// Diagnóstico: o embed devolve duração de ~30s quando está servindo só prévia
+// (nenhuma sessão Premium logada NESTE navegador) e a duração real da faixa
+// quando toca completa. É a forma direta de saber em qual caso a TV está,
+// sem ninguém precisar cronometrar música.
+function showSpotifyStatus(durationMs){
+  if (!durationMs || durationMs <= 0) return;
+  const el = document.getElementById('spotify-status');
+  const preview = durationMs <= 35000;
+  const min = Math.floor(durationMs / 60000);
+  const seg = String(Math.round((durationMs % 60000) / 1000)).padStart(2, '0');
+  el.textContent = preview
+    ? 'Prévia de 30s · sem sessão Premium neste navegador'
+    : `Música completa · ${min}:${seg}`;
+  el.classList.toggle('preview', preview);
+  el.classList.toggle('full', !preview);
+  el.classList.add('show');
+}
+
 window.onSpotifyIframeApiReady = function(IFrameAPI){
   const el = document.getElementById('spotify-frame');
   pendingUri = nextSpotifyUri();
@@ -2188,6 +2222,7 @@ window.onSpotifyIframeApiReady = function(IFrameAPI){
   IFrameAPI.createController(el, { uri: pendingUri, width: '100%', height: '100%' }, controller => {
     spotifyController = controller;
     controller.addListener('playback_update', e => {
+      showSpotifyStatus(e.data && e.data.duration);
       const u = e.data && e.data.playingURI;
       if (u && u !== lastUri){
         if (lastUri !== null) songsPlayed++;   // cada troca de faixa = +1 música tocada
